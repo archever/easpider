@@ -9,8 +9,9 @@ spider = Spider()
 
 @spider.parser
 def parser(res):
-    '''res 是 requests 标准的 res
-    return json
+    '''
+    @params: res requests 标准的 res
+    @return json
     '''
     try:
         html = res.content.decode('gb2312')

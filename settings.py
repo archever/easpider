@@ -10,5 +10,5 @@ REDIS_CONF = {
 }
 
 # 后台 队列, 本地用 queue, 分布用 redis
-# BACKEND = 'queue'
-BACKEND = 'redis'
+BACKEND = 'queue'
+# BACKEND = 'redis'

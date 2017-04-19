@@ -1,19 +1,22 @@
 
 import json
 import logging
-from queue import Queue
 
-# from gevent import spawn, monkey, sleep
-from time import sleep
 import redis
 import requests
 
-import settings
-from functools import wraps
-from threading import Thread
 
-# monkey.patch_socket()
-# monkey.patch_thread()
+from functools import wraps
+
+from gevent.pool import Pool
+from gevent.queue import Queue
+from gevent import spawn, monkey, sleep
+from gevent.greenlet import Greenlet
+import gevent
+
+import settings
+
+monkey.patch_socket()
 
 logging.basicConfig(
     level=logging.INFO,  
@@ -30,17 +33,12 @@ class RedisQu:
     
     def get(self, qu_name):
         while 1:
-            try:
-                rev = self.r.brpop(qu_name, 0)
-                raw_ctx = rev[1]
-            except Exception as err:
-                logging.exception(err)
-            else:
-                ctx = json.loads(raw_ctx)
-                yield ctx
+            rev = self.r.brpop(qu_name, 0)
+            raw_ctx = rev[1]
+            ctx = json.loads(raw_ctx)
+            yield ctx
     
     def put(self, qu_name, ctx):
-        logging.debug('put in {} count: {}'.format(qu_name, self.r.llen(qu_name)))
         self.r.lpush(qu_name, json.dumps(ctx))
 
 class LocalQu:
@@ -49,22 +47,14 @@ class LocalQu:
         self.res = Queue()
     
     def get_qu(self, qu_name):
-        try:
-            qu = self.__dict__.get(qu_name)
-        except Exception as err: 
-            raise er
-        return qu
+        return self.__dict__.get(qu_name)
     
     def get(self, qu_name):
         qu = self.get_qu(qu_name)
         while 1:
-            try:
-                raw_ctx = qu.get()
-            except Exception as err:
-                logging.exception(err)
-            else:
-                ctx = json.loads(raw_ctx)
-                yield ctx
+            raw_ctx = qu.get()
+            ctx = json.loads(raw_ctx)
+            yield ctx
     
     def put(self, qu_name, ctx):
         qu = self.get_qu(qu_name)
@@ -99,7 +89,6 @@ class Spider:
         '''@decorator'''
         def wrapper():
             for task in fn():
-                logging.debug('put in task {}'.format(type(task)))
                 self.qu.put('task', task)
             logging.info('add tasks done')
         self.task_fn = wrapper
@@ -115,6 +104,8 @@ class Spider:
             exit(1)
         self.qu = qu
 
+        join_list = []
+
         if self.task_fn:
             self.task_fn()
         elif settings.BACKEND == 'queue':
@@ -127,6 +118,7 @@ class Spider:
             dealer = Dealer(qu)
             dealer.parser = self.parser_fn
             dealer.start()
+            join_list.append(dealer)
         elif settings.BACKEND == 'queue':
             logging.error('parser is not defined')
             raise Exception('parser is not defined')
@@ -137,48 +129,56 @@ class Spider:
             saver = Saver(qu)
             saver.saver = self.saver_fn
             saver.start()
+            join_list.append(saver)
         elif settings.BACKEND == 'queue':
             logging.error('saver is not defined')
             raise Exception('saver is not defined')
         else:
             logging.warn('saver is not defined if you are using redis for cluster crawing ignore this wranning')
+        try:
+            gevent.joinall(join_list)
+        except:
+            logging.info('all done')
 
-class Dealer(Thread):
+class Dealer(Greenlet):
     '''
     gevent 处理任务 and parser
     '''
     def __init__(self, qu):
         super().__init__()
         self.qu = qu
+        self.pool = Pool()
     
     def deal_tasks(self, ctx):
         try:
             res = requests.request(**ctx)
             logging.info('getting done {}'.format(res))
         except Exception as err:
-            self.qu.put('task', ctx)
-            logging.error('{} fialed with {} and, it will try again'.format(ctx, err))
+            # self.qu.put('task', ctx)
+            logging.error('{} fialed with {} and, it will try again'.format(ctx['url'], err))
             raise err
         else:
             data = self.parser(res)
             self.qu.put('res', data)
             logging.info('parsing done {}'.format(ctx['url']))
+    
+    def shutdown(self):
+        self.pool.kill()
 
-    def run(self):
+    def _run(self):
         logging.info('dealer running')
         for ctx in self.qu.get('task'):
-            # spawn(self.deal_tasks, ctx)
-            self.deal_tasks(ctx)
+            self.pool.spawn(self.deal_tasks, ctx)
             sleep(settings.SLEEP)
         logging.info('dealer done')
 
-class Saver(Thread):
+class Saver(Greenlet):
     '''处理 数据队列'''
     def __init__(self, qu):
         super().__init__()
         self.qu = qu
     
-    def run(self):
+    def _run(self):
         logging.info('saver running')
         for data in self.qu.get('res'):
             if data:
