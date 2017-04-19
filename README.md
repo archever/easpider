@@ -56,6 +56,7 @@ if __name__ == '__main__':
 ### demo
 
 `all_in_demo`: 实现本地 爬取
----
+
+
 `cluster_tasker_saver`: 实现 主服务器分配任务, 获得结果             
 `cluster_parser`: 实现 slaver 服务器处理任务, 可以运行在多个主机
