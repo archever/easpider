@@ -3,6 +3,7 @@ sys.path.append('../')
 
 from easpider import Spider
 import json
+from pymongo import MongoClient
 
 spider = Spider()
 
@@ -44,10 +45,15 @@ def saver(data):
     '''获得 parser 返回的数据 字典
     @params data: dict
     '''
-    filename = next(gen)
-    with open(filename, 'w') as fw:
-        ret = json.dumps(data)
-        fw.write(ret)
+    print('getting...{}'.format(type(data)))
+    client = MongoClient('mongodb://localhost:27017')
+    db = client.get_database('spider')
+    cl = db.get_collection('neihan8')
+    cl.insert(data)
+    # filename = next(gen)
+    # with open(filename, 'w') as fw:
+    #     ret = json.dumps(data)
+    #     fw.write(ret)
 
 if __name__ == '__main__':
     spider.run()

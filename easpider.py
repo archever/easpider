@@ -55,7 +55,7 @@ class LocalQu:
             raw_ctx = qu.get()
             ctx = json.loads(raw_ctx)
             yield ctx
-    
+
     def put(self, qu_name, ctx):
         qu = self.get_qu(qu_name)
         qu.put(json.dumps(ctx))
@@ -68,6 +68,8 @@ class Spider:
         self.parser_fn = None
         self.saver_fn = None
         self.task_fn = None
+        self.session_fn = None
+        self.fail_handler_fn = None
         self.qu = None
     
     def parser(self, fn):
@@ -93,6 +95,14 @@ class Spider:
             logging.info('add tasks done')
         self.task_fn = wrapper
     
+    def fail_handler(self, fn):
+        '''@decorator'''
+        def wrapper(*args, **kw):
+            ctx = fn(*args, **kw)
+            logging.warn('fialed and will try again {}'.format(ctx['url']))
+            self.qu.put('task', ctx)
+        self.fail_handler_fn = wrapper
+    
     def run(self):
         logging.info('spider runnning')
         if self.BACKEND == 'redis':
@@ -113,9 +123,10 @@ class Spider:
             raise Exception('tasker is not defined')
         else:
             logging.warn('tasker is not defined if you are using redis for cluster crawing ignore this wranning')
-        
+
         if self.parser_fn:
             dealer = Dealer(qu)
+            dealer.fail_handler = self.fail_handler_fn
             dealer.parser = self.parser_fn
             dealer.start()
             join_list.append(dealer)
@@ -123,8 +134,9 @@ class Spider:
             logging.error('parser is not defined')
             raise Exception('parser is not defined')
         else:
-            logging.warn('parser is not defined if you are using redis for cluster crawing ignore this wranning')
-        
+            logging.warn('parser is not defined, if you are using redis for cluster crawing ignore this wranning')
+
+
         if self.saver_fn:
             saver = Saver(qu)
             saver.saver = self.saver_fn
@@ -134,7 +146,7 @@ class Spider:
             logging.error('saver is not defined')
             raise Exception('saver is not defined')
         else:
-            logging.warn('saver is not defined if you are using redis for cluster crawing ignore this wranning')
+            logging.warn('saver is not defined, if you are using redis for cluster crawing ignore this wranning')
         try:
             gevent.joinall(join_list)
         except:
@@ -151,16 +163,19 @@ class Dealer(Greenlet):
     
     def deal_tasks(self, ctx):
         try:
-            res = requests.request(**ctx)
+            res = requests.request(**ctx,timeout=settings.TIME_OUT)
             logging.info('getting done {}'.format(res))
         except Exception as err:
-            # self.qu.put('task', ctx)
-            logging.error('{} fialed with {} and, it will try again'.format(ctx['url'], err))
-            raise err
+            self.fail_handler(ctx)
+            logging.error('{} fialed with {} and will be handled'.format(ctx['url'], err))
         else:
-            data = self.parser(res)
-            self.qu.put('res', data)
-            logging.info('parsing done {}'.format(ctx['url']))
+            if res.status_code == 200:
+                data = self.parser(res)
+                self.qu.put('res', data)
+                logging.info('parsing done {}'.format(ctx['url']))
+            else:
+                self.fail_handler(ctx)
+                logging.error('{} fialed with {} and will try again'.format(ctx['url'], res))
     
     def shutdown(self):
         self.pool.kill()
@@ -177,7 +192,7 @@ class Saver(Greenlet):
     def __init__(self, qu):
         super().__init__()
         self.qu = qu
-    
+
     def _run(self):
         logging.info('saver running')
         for data in self.qu.get('res'):
