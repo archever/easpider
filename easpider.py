@@ -5,7 +5,6 @@ import logging
 import redis
 import requests
 
-
 from functools import wraps
 
 from gevent.pool import Pool
@@ -97,8 +96,8 @@ class Spider:
     
     def fail_handler(self, fn):
         '''@decorator'''
-        def wrapper(*args, **kw):
-            ctx = fn(*args, **kw)
+        def wrapper(ctx):
+            ctx = fn(ctx)
             logging.warn('fialed and will try again {}'.format(ctx['url']))
             self.qu.put('task', ctx)
         self.fail_handler_fn = wrapper
@@ -136,7 +135,6 @@ class Spider:
         else:
             logging.warn('parser is not defined, if you are using redis for cluster crawing ignore this wranning')
 
-
         if self.saver_fn:
             saver = Saver(qu)
             saver.saver = self.saver_fn
@@ -160,23 +158,24 @@ class Dealer(Greenlet):
         super().__init__()
         self.qu = qu
         self.pool = Pool()
+        self.TIME_OUT = settings.TIME_OUT
     
     def deal_tasks(self, ctx):
         try:
-            res = requests.request(**ctx,timeout=settings.TIME_OUT)
+            res = requests.request(**ctx, timeout=self.TIME_OUT)
             logging.info('getting done {}'.format(res))
         except Exception as err:
-            self.fail_handler(ctx)
-            logging.error('{} fialed with {} and will be handled'.format(ctx['url'], err))
+            self.fail_handler and self.fail_handler(ctx)
+            logging.error('{} fialed with {} and will be handled agian'.format(ctx['url'], err))
         else:
             if res.status_code == 200:
                 data = self.parser(res)
                 self.qu.put('res', data)
                 logging.info('parsing done {}'.format(ctx['url']))
             else:
-                self.fail_handler(ctx)
+                self.fail_handler and self.fail_handler(ctx)
                 logging.error('{} fialed with {} and will try again'.format(ctx['url'], res))
-    
+
     def shutdown(self):
         self.pool.kill()
 

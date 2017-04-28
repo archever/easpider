@@ -27,17 +27,15 @@ def fail_handler(ctx):
         # {'http': '61.191.173.31:808'},
         # {'http': '221.216.94.77:808'},
         None
-        
     ]
     ctx['proxies'] = random.choice(proxies_list)
     return ctx
 
-
 @spider.parser
 def parser(res):
-    '''处理请求后的数据, 需要返回处理要保存的字典
-        @params: res 是 requests 标准的 res
-        @return: dict
+    '''
+    @params: res requests 标准的 res
+    @return json
     '''
     try:
         html = res.content.decode('gb2312')

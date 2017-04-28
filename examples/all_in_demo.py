@@ -52,8 +52,9 @@ def add_task():
 
 def get_filename():
     counter = 0
+    filedir = './test/'
     while 1:
-        yield 'task_{}.json'.format(counter)
+        yield '{}task_{}.json'.format(filedir, counter)
         counter += 1
 
 gen = get_filename()
@@ -87,11 +88,11 @@ def saver(data):
     '''获得 parser 返回的数据 字典
     @params data: dict
     '''
-    # filename = next(gen)
-    print('getting...{}'.format(data))
-    # with open(filename, 'w') as fw:
-    #     ret = json.dumps(data)
-    #     fw.write(ret)
+    filename = next(gen)
+    # print('getting...{}'.format(data))
+    with open(filename, 'w') as fw:
+        ret = json.dumps(data)
+        fw.write(ret)
 
 if __name__ == '__main__':
     spider.run()
