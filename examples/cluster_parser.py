@@ -9,27 +9,9 @@ spider = Spider()
 
 @spider.fail_handler
 def fail_handler(ctx):
-    proxies_list = [
-        # "http": "http://user:pass@10.10.1.10:3128/",
-        # {'http': 'mr_mao_hacker:sffqry9r@122.232.216.182:24224'},
-        # {'http': '115.231.105.109:8081'},
-        # {'http': '218.22.219.133:808'},
-        # {'http': '121.61.101.240:808'},
-        # {'http': '175.155.25.54:808'},
-        # {'http': '115.220.4.104:808'},
-        # {'http': '124.88.67.81:80'},
-        # {'http': '122.228.179.178:80'},
-        # {'http': '49.86.62.24:808'},
-        # {'http': '175.155.24.2:808'},
-        # {'http': '120.43.48.92:808'},
-        # {'http': '222.66.22.82:8090'},
-        # {'http': '119.5.1.6:808'},
-        # {'http': '61.191.173.31:808'},
-        # {'http': '221.216.94.77:808'},
-        None
-    ]
-    ctx['proxies'] = random.choice(proxies_list)
-    return ctx
+    with open('failed.json', 'a') as fa:
+       data = json.dumps(ctx['data']) + ', \n'
+       fa.write(data)
 
 @spider.parser
 def parser(res):

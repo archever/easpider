@@ -13,9 +13,9 @@ from gevent import spawn, monkey, sleep
 from gevent.greenlet import Greenlet
 import gevent
 
-import settings
+import config
 
-monkey.patch_socket()
+monkey.patch_all(thread=False, select=False)
 
 logging.basicConfig(
     level=logging.INFO,  
@@ -27,7 +27,7 @@ logging.basicConfig(
 
 class RedisQu:
     def __init__(self):
-        pool = redis.ConnectionPool(**settings.REDIS_CONF)
+        pool = redis.ConnectionPool(**config.REDIS_CONF)
         self.r = redis.StrictRedis(connection_pool=pool) 
     
     def get(self, qu_name):
@@ -61,22 +61,22 @@ class LocalQu:
                 
 
 class Spider:
-    def __init__(self):
-        self.BACKEND = settings.BACKEND
-        self.SLEEP = settings.SLEEP
+    def __init__(self, config=config):
+        self.BACKEND = config.BACKEND
+        self.SLEEP = config.SLEEP
         self.parser_fn = None
         self.saver_fn = None
         self.task_fn = None
         self.session_fn = None
         self.fail_handler_fn = None
+        self.init_session_fn = None
         self.qu = None
     
     def parser(self, fn):
         '''@decorator'''
         def wrapper(res):
             ret = fn(res)
-            logging.debug('put in res {}'.format(len(ret)))
-            self.qu.put('res', ret)
+            return ret
         self.parser_fn = wrapper
     
     def saver(self, fn):
@@ -86,6 +86,14 @@ class Spider:
             logging.info('saving done {}'.format(type(data)))
         self.saver_fn = wrapper
     
+    # def init_session(self, fn):
+    #     '''@decorator'''
+    #     def wrapper():
+    #         ctx = fn()
+    #         logging.info('init session done')
+    #         return ctx
+    #     self.init_session_fn = wrapper
+
     def tasker(self, fn):
         '''@decorator'''
         def wrapper():
@@ -97,9 +105,9 @@ class Spider:
     def fail_handler(self, fn):
         '''@decorator'''
         def wrapper(ctx):
-            ctx = fn(ctx)
-            logging.warn('fialed and will try again {}'.format(ctx['url']))
-            self.qu.put('task', ctx)
+            ctx_ = fn(ctx)
+            if ctx_:
+                self.qu.put('task', ctx_)
         self.fail_handler_fn = wrapper
     
     def run(self):
@@ -117,7 +125,7 @@ class Spider:
 
         if self.task_fn:
             self.task_fn()
-        elif settings.BACKEND == 'queue':
+        elif config.BACKEND == 'queue':
             logging.error('tasker is not defined')
             raise Exception('tasker is not defined')
         else:
@@ -129,7 +137,7 @@ class Spider:
             dealer.parser = self.parser_fn
             dealer.start()
             join_list.append(dealer)
-        elif settings.BACKEND == 'queue':
+        elif config.BACKEND == 'queue':
             logging.error('parser is not defined')
             raise Exception('parser is not defined')
         else:
@@ -140,7 +148,7 @@ class Spider:
             saver.saver = self.saver_fn
             saver.start()
             join_list.append(saver)
-        elif settings.BACKEND == 'queue':
+        elif config.BACKEND == 'queue':
             logging.error('saver is not defined')
             raise Exception('saver is not defined')
         else:
@@ -158,20 +166,35 @@ class Dealer(Greenlet):
         super().__init__()
         self.qu = qu
         self.pool = Pool()
-        self.TIME_OUT = settings.TIME_OUT
+        self.cookies = requests.cookies.RequestsCookieJar()
+        self.TIME_OUT = config.TIME_OUT
     
     def deal_tasks(self, ctx):
         try:
+            if ctx.get('cookies', None):
+                self.cookies.update(ctx['cookies'])
+            else:
+                ctx['cookies'] = self.cookies
             res = requests.request(**ctx, timeout=self.TIME_OUT)
+            self.cookies.update(res.cookies)
             logging.info('getting done {}'.format(res))
         except Exception as err:
             self.fail_handler and self.fail_handler(ctx)
             logging.error('{} fialed with {} and will be handled agian'.format(ctx['url'], err))
         else:
             if res.status_code == 200:
-                data = self.parser(res)
-                self.qu.put('res', data)
-                logging.info('parsing done {}'.format(ctx['url']))
+                try:
+                    data = self.parser(res)
+                except Exception as err:
+                    self.fail_handler and self.fail_handler(ctx)
+                    logging.error('{} parsing fialed with {} and will be handled agian'.format(ctx['url'], err))
+                else:
+                    if data:
+                        self.qu.put('res', data)
+                        logging.info('parsing done {}'.format(ctx['url']))
+                    else:
+                        self.fail_handler and self.fail_handler(ctx)
+                        logging.error('{} parsing returns None and will be handled agian'.format(ctx['url']))
             else:
                 self.fail_handler and self.fail_handler(ctx)
                 logging.error('{} fialed with {} and will try again'.format(ctx['url'], res))
@@ -183,7 +206,7 @@ class Dealer(Greenlet):
         logging.info('dealer running')
         for ctx in self.qu.get('task'):
             self.pool.spawn(self.deal_tasks, ctx)
-            sleep(settings.SLEEP)
+            sleep(config.SLEEP)
         logging.info('dealer done')
 
 class Saver(Greenlet):

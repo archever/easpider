@@ -1,6 +1,6 @@
 
 # 每次请求的延迟时间
-SLEEP = 0
+SLEEP = 1
 TIME_OUT = 10
 
 # redis 配置
@@ -11,5 +11,5 @@ REDIS_CONF = {
 }
 
 # 后台 队列, 本地用 queue, 分布用 redis
-# BACKEND = 'queue'
-BACKEND = 'redis'
+BACKEND = 'queue'
+# BACKEND = 'redis'
