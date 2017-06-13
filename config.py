@@ -1,7 +1,7 @@
 
 # 每次请求的延迟时间
-SLEEP = 1
-TIME_OUT = 10
+SLEEP = 3
+TIME_OUT = 3
 
 # redis 配置
 REDIS_CONF = {

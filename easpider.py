@@ -1,5 +1,5 @@
 
-import json
+import pickle
 import logging
 
 import redis
@@ -34,11 +34,11 @@ class RedisQu:
         while 1:
             rev = self.r.brpop(qu_name, 0)
             raw_ctx = rev[1]
-            ctx = json.loads(raw_ctx)
+            ctx = pickle.loads(raw_ctx)
             yield ctx
     
     def put(self, qu_name, ctx):
-        self.r.lpush(qu_name, json.dumps(ctx))
+        self.r.lpush(qu_name, pickle.dumps(ctx))
 
 class LocalQu:
     def __init__(self):
@@ -52,12 +52,12 @@ class LocalQu:
         qu = self.get_qu(qu_name)
         while 1:
             raw_ctx = qu.get()
-            ctx = json.loads(raw_ctx)
+            ctx = pickle.loads(raw_ctx)
             yield ctx
 
     def put(self, qu_name, ctx):
         qu = self.get_qu(qu_name)
-        qu.put(json.dumps(ctx))
+        qu.put(pickle.dumps(ctx))
                 
 
 class Spider:
@@ -71,39 +71,36 @@ class Spider:
         self.fail_handler_fn = None
         self.init_session_fn = None
         self.qu = None
+        self.ctx = dict()
+    
+    def add_task(self, ctx, endpoint="main"):
+        ctx.update(dict(endpoint=endpoint))
+        self.qu.put('task', ctx)
     
     def parser(self, fn):
-        '''@decorator'''
         def wrapper(res):
+            endpoint = res.endpoint
             ret = fn(res)
-            return ret
+            return dict(data=ret, endpoint=endpoint)
         self.parser_fn = wrapper
     
     def saver(self, fn):
-        '''@decorator'''
         def wrapper(data):
             fn(data)
             logging.info('saving done {}'.format(type(data)))
         self.saver_fn = wrapper
-    
-    # def init_session(self, fn):
-    #     '''@decorator'''
-    #     def wrapper():
-    #         ctx = fn()
-    #         logging.info('init session done')
-    #         return ctx
-    #     self.init_session_fn = wrapper
 
-    def tasker(self, fn):
-        '''@decorator'''
-        def wrapper():
-            for task in fn():
-                self.qu.put('task', task)
-            logging.info('add tasks done')
-        self.task_fn = wrapper
+    def tasker(self, endpoint="main"):
+        def inner(fn):
+            def wrapper():
+                for task in fn():
+                    task["endpoint"] = endpoint
+                    self.qu.put('task', task)
+                logging.info('add to {} done'.format(endpoint))
+            self.task_fn = wrapper
+        return inner
     
     def fail_handler(self, fn):
-        '''@decorator'''
         def wrapper(ctx):
             ctx_ = fn(ctx)
             if ctx_:
@@ -170,31 +167,33 @@ class Dealer(Greenlet):
         self.TIME_OUT = config.TIME_OUT
     
     def deal_tasks(self, ctx):
+        endpoint = ctx.pop("endpoint")
         try:
-            if ctx.get('cookies', None):
-                self.cookies.update(ctx['cookies'])
-            else:
-                ctx['cookies'] = self.cookies
+            if ctx.get('cookies'):
+                ctx['cookies'].update(self.cookies)
+                print(ctx['cookies'])
             res = requests.request(**ctx, timeout=self.TIME_OUT)
+            res.endpoint = endpoint
             self.cookies.update(res.cookies)
             logging.info('getting done {}'.format(res))
         except Exception as err:
+            ctx["endpoint"] = endpoint
             self.fail_handler and self.fail_handler(ctx)
-            logging.error('{} fialed with {} and will be handled agian'.format(ctx['url'], err))
+            logging.error('{} fialed with {} '.format(ctx['url'], err))
         else:
             if res.status_code == 200:
                 try:
                     data = self.parser(res)
                 except Exception as err:
                     self.fail_handler and self.fail_handler(ctx)
-                    logging.error('{} parsing fialed with {} and will be handled agian'.format(ctx['url'], err))
+                    logging.error('{} parsing fialed with {} '.format(ctx['url'], err))
                 else:
                     if data:
                         self.qu.put('res', data)
                         logging.info('parsing done {}'.format(ctx['url']))
                     else:
                         self.fail_handler and self.fail_handler(ctx)
-                        logging.error('{} parsing returns None and will be handled agian'.format(ctx['url']))
+                        logging.error('{} parsing returns None '.format(ctx['url']))
             else:
                 self.fail_handler and self.fail_handler(ctx)
                 logging.error('{} fialed with {} and will try again'.format(ctx['url'], res))
@@ -210,7 +209,6 @@ class Dealer(Greenlet):
         logging.info('dealer done')
 
 class Saver(Greenlet):
-    '''处理 数据队列'''
     def __init__(self, qu):
         super().__init__()
         self.qu = qu
