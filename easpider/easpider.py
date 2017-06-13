@@ -1,9 +1,7 @@
 
 import pickle
-import logging
-
-import redis
 import requests
+import logging
 
 from functools import wraps
 
@@ -17,16 +15,9 @@ import config
 
 monkey.patch_all(thread=False, select=False)
 
-logging.basicConfig(
-    level=logging.INFO,  
-    format='%(asctime)s: %(levelname)-8s %(lineno)-4s %(message)s',  
-    datefmt='%m-%d %H:%M',  
-    # filename='easpider.log',  
-    # filemode='w'
-) 
-
 class RedisQu:
     def __init__(self):
+        import redis
         pool = redis.ConnectionPool(**config.REDIS_CONF)
         self.r = redis.StrictRedis(connection_pool=pool) 
     
@@ -72,6 +63,11 @@ class Spider:
         self.init_session_fn = None
         self.qu = None
         self.ctx = dict()
+    
+    def get_ctx(self, **kws):
+        ctx = dict(kws)
+        ctx.update(self.ctx)
+        return ctx
     
     def add_task(self, ctx, endpoint="main"):
         ctx.update(dict(endpoint=endpoint))

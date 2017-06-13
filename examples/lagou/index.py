@@ -1,6 +1,7 @@
 
 import sys
-sys.path.insert(0, '../..')
+sys.path.append('../..')
+
 import json
 import logging
 from pyquery import PyQuery
@@ -18,13 +19,12 @@ logging.basicConfig(
 
 spider = Spider(config=config)
 
-ctx = dict()
-ctx["method"] = "GET"
-ctx["headers"] = {
+spider.ctx["method"] = "GET"
+spider.ctx["headers"] = {
     "Host": "www.lagou.com",
     "User-Agent": "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.1 (KHTML, like Gecko) Chrome/22.0.1207.1 Safari/537.1"
 }
-ctx["cookies"] = {
+spider.ctx["cookies"] = {
     "user_trace_token": "20170613232027-d458fe9b-504b-11e7-9b38-5254005c3644"
 }
 
@@ -36,10 +36,7 @@ def tasker():
     start = int(input("start_page:"))
     end = int(input("end_page:"))
     for i in range(start, end+1):
-        ctx_ = dict()
-        ctx_.update(ctx)
-        ctx_["url"] = list_url.format(page=i)
-        yield ctx_
+        yield spider.get_ctx(url=list_url.format(page=i))
 
 @spider.parser
 def parser(res):
@@ -57,11 +54,8 @@ def parser(res):
         print(res.url)
         links = jq.find(".position_link")
         for idx, itm in enumerate(links):
-            ctx_ = dict()
-            ctx_.update(ctx)
-            ctx_["url"] = links.eq(idx).attr("href")
-            print(ctx_["url"])
-            spider.add_task(ctx_, "detail")
+            ctx = spider.get_ctx(url=links.eq(idx).attr("href"))
+            spider.add_task(ctx, "detail")
 
 @spider.saver
 def saver(ret):

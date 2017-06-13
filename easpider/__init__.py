@@ -1,0 +1,2 @@
+
+from .easpider import Spider
