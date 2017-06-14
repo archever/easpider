@@ -2,7 +2,7 @@
 from setuptools import setup, find_packages
 
 setup(name='easpider',
-      version='2.0.1',
+      version='2.0.2',
       keywords=('spider'),
       description='easy to spide',
       license='MIT License',
