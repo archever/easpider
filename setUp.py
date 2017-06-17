@@ -14,7 +14,7 @@ setup(name='easpider',
       packages=find_packages(),
       include_package_data=True,
       platforms='any',
-      install_requires=['requests', 'gevent'],
+      install_requires=['requests', 'gevent', "redis"],
       classifiers=[
           'Environment :: Web Environment',
           'Intended Audience :: Developers',
