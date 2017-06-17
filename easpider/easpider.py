@@ -159,7 +159,6 @@ class Spider:
             dealer.start()
         elif config.BACKEND == 'queue':
             logging.error('parser is not defined')
-            raise Exception('parser is not defined')
         else:
             logging.warn('parser is not defined, if you are using redis for cluster crawing ignore this wranning')
 
@@ -170,7 +169,6 @@ class Spider:
             saver.start()
         elif config.BACKEND == 'queue':
             logging.error('saver is not defined')
-            raise Exception('saver is not defined')
         else:
             logging.warn('saver is not defined, if you are using redis for cluster crawing ignore this wranning')
         
@@ -212,8 +210,8 @@ class Dealer(Greenlet):
                         self.qu.put('res', (endpoint, data))
                         logging.info('parsing done {} to {}'.format(ctx['url'], endpoint))
                     else:
-                        self.fail_handler and self.fail_handler(ctx, endpoint)
-                        logging.error('parsing {} returns None to {}'.format(ctx['url'], endpoint))
+                        # self.fail_handler and self.fail_handler(ctx, endpoint)
+                        logging.warn('parsing {} returns None to {}'.format(ctx['url'], endpoint))
             else:
                 self.fail_handler and self.fail_handler(ctx, endpoint)
                 logging.error('fialed {} to {} with {} '.format(ctx['url'], endpoint, err))
