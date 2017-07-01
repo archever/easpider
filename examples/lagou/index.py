@@ -1,6 +1,6 @@
 
-# import sys
-# sys.path.append('../..')
+import sys
+sys.path.insert(0, '../..')
 
 import json
 import logging
@@ -18,8 +18,11 @@ spider.ctx["headers"] = {
     "User-Agent": "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.1 (KHTML, like Gecko) Chrome/22.0.1207.1 Safari/537.1"
 }
 spider.ctx["cookies"] = {
-    "user_trace_token": "20170613232027-d458fe9b-504b-11e7-9b38-5254005c3644"
+    "JSESSIONID": "ABAAABAABEEAAJA1BC3495BB5A9F6DA0BD0C8DD10D19351",
+    "user_trace_token": "20170613232027-d458fe9b-504b-11e7-9b38-5254005c3644",
+    "SEARCH_ID": "88233fe1cd6d4d0aa4bcbe3976bab59f"
 }
+spider.ctx["timeout"] = 10
 
 # detail_url = "https://www.lagou.com/jobs/{position_id}.html"
 list_url = "https://www.lagou.com/zhaopin/Python/{page}/"

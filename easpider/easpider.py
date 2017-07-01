@@ -70,8 +70,8 @@ class Spider:
         self.task_fn = None
         self.fail_handler_fn = None
         self.qu = None
-        self.ctx = dict(timeout=self.TIMEOUT)
-    
+        self.ctx = dict(timeout=self.TIMEOUT, cookies=dict(), headers=dict())
+
     def get_ctx(self, **kws):
         """
         包装 ctx, 返回新的字典
@@ -79,7 +79,7 @@ class Spider:
         ctx = dict(kws)
         ctx.update(self.ctx)
         return ctx
-    
+
     def add_task(self, ctx, endpoint="main"):
         """
         添加任务
@@ -94,7 +94,7 @@ class Spider:
             ret = fn(res, endpoint)
             logging.info('parsing done {} to {}'.format(res.url, endpoint))
             return ret
-        self.parser_fn = wrapper
+        self.parser_fn = fn
     
     def saver(self, fn):
         """
@@ -150,7 +150,7 @@ class Spider:
             raise Exception('tasker is not defined')
         else:
             logging.warn('tasker is not defined if you are using redis for cluster crawing ignore this wranning')
-        
+
         # 初始化 解析任务函数
         if self.parser_fn:
             dealer = Dealer(qu)
@@ -184,22 +184,24 @@ class Dealer(Greenlet):
         self.qu = qu
         self.pool = Pool()
         self.cookies = requests.cookies.RequestsCookieJar()
+        self.referer = ""
     
     def deal_tasks(self, ctx, endpoint):
-        if ctx.get('cookies'):
-            ctx['cookies'].update(self.cookies)
-            logging.debug(ctx["cookies"])
+        ctx['cookies'].update(self.cookies)
+        logging.debug(ctx["cookies"])
+        ctx["headers"].update(dict(referer=self.referer))
         try:
             # 发起请求
             res = requests.request(**ctx)
             # 更新 cookies
+            self.referer = res.url
             self.cookies.update(res.cookies)
             logging.info('getting done {}:{} to {}'.format(res, res.url, endpoint))
         except Exception as err:
             self.fail_handler and self.fail_handler(ctx, endpoint)
             logging.error('fialed {} to {} with {} '.format(ctx['url'], endpoint, err))
         else:
-            if res.status_code == 200:
+            if res.ok:
                 try:
                     data = self.parser(res, endpoint)
                 except Exception as err:

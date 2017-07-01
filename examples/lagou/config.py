@@ -13,7 +13,7 @@ logging.basicConfig(
 # 每次请求的延迟时间
 SLEEP = 3
 # 请求的超时时间
-TIMEOUT = 3
+TIMEOUT = 10
 
 # redis 配置
 REDIS_CONF = {
